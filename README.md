@@ -1,6 +1,6 @@
 # 📰 News Sentiment Classification App  
 A machine learning web application that classifies news headlines into **Positive**, **Negative**, or **Neutral** sentiment.  
-Built using **Python, Streamlit, Scikit-Learn, and Docker**, and deployed publicly on **Streamlit Cloud & Docker Hub**.
+Built using **Python, Streamlit, Scikit-Learn, and Docker**, and deployed publicly on **Streamlit Cloud & made a docker image on Docker Hub**.
 
 ---
 
