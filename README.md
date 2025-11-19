@@ -20,5 +20,4 @@ docker pull jubinkbabu/news-sentiment-app:latest
 Jubin K Babu
 Docker Hub: https://hub.docker.com/u/jubinkbabu
 
-GitHub: https://github.com/
-<your-github-username>
+
