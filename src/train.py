@@ -33,7 +33,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 
 LOGGER = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ def load_dataset(path: Path) -> pd.DataFrame:
     frame[TEXT_COLUMN] = frame[TEXT_COLUMN].fillna("").astype(str).str.strip()
     frame[LABEL_COLUMN] = (
         frame[LABEL_COLUMN].fillna("").astype(str).str.strip().str.lower()
+        .replace({"0": "negative", "0.0": "negative", "1": "positive", "1.0": "positive"})
     )
     frame = frame[(frame[TEXT_COLUMN] != "") & (frame[LABEL_COLUMN] != "")]
 
@@ -111,10 +112,9 @@ def build_pipeline() -> Pipeline:
                 "tfidf",
                 TfidfVectorizer(
                     lowercase=True,
-                    strip_accents="unicode",
-                    ngram_range=(1, 2),
+                    ngram_range=(1, 1),
                     min_df=1,
-                    max_features=100_000,
+                    max_features=6_000,
                     sublinear_tf=True,
                 ),
             ),
@@ -122,7 +122,7 @@ def build_pipeline() -> Pipeline:
                 "classifier",
                 LogisticRegression(
                     max_iter=1_000,
-                    class_weight="balanced",
+                    class_weight={"negative": 10, "positive": 1},
                     random_state=RANDOM_STATE,
                 ),
             ),
@@ -255,6 +255,25 @@ def main() -> None:
     )
 
     pipeline = build_pipeline()
+    if set(frame[LABEL_COLUMN].unique()) != {"negative", "positive"}:
+        raise ValueError("This tuned model requires binary negative/positive sentiment labels.")
+    # Tune only on the training split; keep the held-out test set untouched.
+    candidates = [
+        "balanced",
+        {"negative": 3, "positive": 1},
+        {"negative": 6, "positive": 1},
+        {"negative": 10, "positive": 1},
+    ]
+    cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=RANDOM_STATE)
+    cv_results = []
+    for weights in candidates:
+        candidate = build_pipeline()
+        candidate.named_steps["classifier"].set_params(class_weight=weights)
+        scores = cross_val_score(candidate, x_train, y_train, cv=cv, scoring="f1_macro")
+        cv_results.append({"class_weight": str(weights), "macro_f1": float(scores.mean())})
+    best_index = max(range(len(candidates)), key=lambda i: cv_results[i]["macro_f1"])
+    pipeline.named_steps["classifier"].set_params(class_weight=candidates[best_index])
+    LOGGER.info("Selected class weights: %s", candidates[best_index])
     LOGGER.info(
         "Training on %d samples; testing on %d samples.",
         len(x_train),
@@ -265,6 +284,9 @@ def main() -> None:
 
     labels = sorted(frame[LABEL_COLUMN].unique().tolist())
     results = save_evaluation(y_test, predictions, labels, len(x_test), len(x_train))
+    results["cross_validation"] = cv_results
+    results["selected_class_weight"] = str(candidates[best_index])
+    (REPORTS_DIR / "metrics.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
 
     import joblib
 
