@@ -8,7 +8,7 @@ A reproducible news headline sentiment classifier using TF-IDF features and Logi
 - Produces class-wise metrics, a confusion matrix, and a metrics JSON file.
 - Uses a stratified hold-out test split and a fixed random seed.
 - Fits text vectorization only on training data using a scikit-learn pipeline.
-- Validates the labelled dataset and removes empty rows and exact text/label duplicates.
+- Validates the labelled dataset, removes empty rows and duplicate headlines, and drops headlines with conflicting labels.
 
 ## Project structure
 
