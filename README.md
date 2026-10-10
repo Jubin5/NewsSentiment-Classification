@@ -46,11 +46,11 @@ Place your CSV at `data/news_sentiment.csv`. It must include:
 | Column | Meaning |
 |---|---|
 | `text` | News headline or article text |
-| `sentiment` | Ground-truth class, e.g. `positive`, `negative`, `neutral` |
+| `sentiment` | Ground-truth class, such as `positive`/`negative`/`neutral` or numeric labels `0`/`1` |
 
 See [data/README.md](data/README.md) for a schema example. If the dataset uses other column names, update `TEXT_COLUMN` and `LABEL_COLUMN` in `src/train.py`.
 
-**Important:** the current repository did not contain the original labelled training dataset or training script. Metrics cannot be calculated honestly until you supply the dataset or identify its source. Examples in the schema are illustrative only and must not be used to claim evaluation performance.
+**Important:** the original repository did not contain its labelled training dataset or training script. The dataset supplied for this rebuild contains binary labels `0` and `1`; the semantic meaning of each numeric label should be documented before presenting them as positive or negative sentiment. Examples in the schema are illustrative only and must not be used to claim evaluation performance.
 
 ## 3. Train and evaluate
 
