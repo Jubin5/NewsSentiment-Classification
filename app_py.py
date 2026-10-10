@@ -45,7 +45,7 @@ def load_metrics() -> dict[str, Any] | None:
 
 
 st.title("📰 News Sentiment Classifier")
-st.caption("Classify a headline as positive, negative, or neutral.")
+st.caption("Classify a news text using the sentiment labels present in your training dataset.")
 
 headline = st.text_area(
     "Enter a news headline",
@@ -64,8 +64,12 @@ if st.button("Analyze sentiment", type="primary"):
                 "positive": "🟢 Positive",
                 "negative": "🔴 Negative",
                 "neutral": "🟡 Neutral",
+                "0": "Class 0",
+                "0.0": "Class 0",
+                "1": "Class 1",
+                "1.0": "Class 1",
             }
-            st.subheader(f"Predicted sentiment: {labels.get(prediction, prediction.title())}")
+            st.subheader(f"Predicted label: {labels.get(prediction, prediction.title())}")
             if hasattr(model, "predict_proba"):
                 probabilities = model.predict_proba([headline.strip()])[0]
                 class_names = model.classes_
