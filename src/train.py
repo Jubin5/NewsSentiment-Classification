@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +54,7 @@ def configure_logging() -> None:
 
 
 def load_dataset(path: Path) -> pd.DataFrame:
-    """Load and validate a labelled CSV dataset."""
+    """Load, clean, and validate a labelled CSV dataset."""
     if not path.is_file():
         raise FileNotFoundError(
             f"Dataset not found: {path}. Provide a CSV with 'text' and "
@@ -70,17 +71,35 @@ def load_dataset(path: Path) -> pd.DataFrame:
 
     frame = frame[[TEXT_COLUMN, LABEL_COLUMN]].copy()
     frame[TEXT_COLUMN] = frame[TEXT_COLUMN].fillna("").astype(str).str.strip()
-    frame[LABEL_COLUMN] = frame[LABEL_COLUMN].fillna("").astype(str).str.strip().str.lower()
+    frame[LABEL_COLUMN] = (
+        frame[LABEL_COLUMN].fillna("").astype(str).str.strip().str.lower()
+    )
     frame = frame[(frame[TEXT_COLUMN] != "") & (frame[LABEL_COLUMN] != "")]
-    frame = frame.drop_duplicates(subset=[TEXT_COLUMN, LABEL_COLUMN]).reset_index(drop=True)
+
+    # The same headline with different labels is ambiguous; exclude such text
+    # rather than allowing contradictory examples to leak across data splits.
+    label_counts = frame.groupby(TEXT_COLUMN)[LABEL_COLUMN].nunique()
+    conflicting_texts = label_counts[label_counts > 1].index
+    if len(conflicting_texts):
+        LOGGER.warning(
+            "Dropping %d headlines that have conflicting sentiment labels.",
+            len(conflicting_texts),
+        )
+        frame = frame[~frame[TEXT_COLUMN].isin(conflicting_texts)]
+
+    # Remove repeated headlines, not just exact text-label row duplicates.
+    frame = frame.drop_duplicates(subset=[TEXT_COLUMN]).reset_index(drop=True)
 
     if frame.empty:
-        raise ValueError("No usable rows remain after removing empty values.")
+        raise ValueError("No usable rows remain after cleaning the dataset.")
     if frame[LABEL_COLUMN].nunique() < 2:
         raise ValueError("At least two sentiment classes are required.")
 
     LOGGER.info("Loaded %d usable records.", len(frame))
-    LOGGER.info("Class distribution:\n%s", frame[LABEL_COLUMN].value_counts().to_string())
+    LOGGER.info(
+        "Class distribution:\n%s",
+        frame[LABEL_COLUMN].value_counts().to_string(),
+    )
     return frame
 
 
@@ -129,12 +148,22 @@ def save_evaluation(
         "test_samples": test_size,
         "classes": labels,
         "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
-        "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+        "precision_macro": float(
+            precision_score(y_true, y_pred, average="macro", zero_division=0)
+        ),
+        "recall_macro": float(
+            recall_score(y_true, y_pred, average="macro", zero_division=0)
+        ),
         "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
-        "precision_weighted": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "recall_weighted": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "f1_weighted": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
+        "precision_weighted": float(
+            precision_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "recall_weighted": float(
+            recall_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "f1_weighted": float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
         "classification_report": classification_report(
             y_true, y_pred, labels=labels, output_dict=True, zero_division=0
         ),
@@ -167,7 +196,11 @@ def save_evaluation(
     plt.close()
 
     metric_names = ["Accuracy", "Macro F1", "Weighted F1"]
-    metric_values = [results["accuracy"], results["f1_macro"], results["f1_weighted"]]
+    metric_values = [
+        results["accuracy"],
+        results["f1_macro"],
+        results["f1_weighted"],
+    ]
     plt.figure(figsize=(7, 4))
     sns.barplot(x=metric_names, y=metric_values)
     plt.ylim(0, 1)
@@ -197,6 +230,22 @@ def main() -> None:
         parser.error("--test-size must be between 0.1 and 0.5.")
 
     frame = load_dataset(args.data)
+    class_counts = frame[LABEL_COLUMN].value_counts()
+    class_count = len(class_counts)
+    if (class_counts < 2).any():
+        raise ValueError(
+            "Each sentiment class needs at least two distinct headlines "
+            "for a stratified train/test split."
+        )
+
+    test_count = math.ceil(len(frame) * args.test_size)
+    train_count = len(frame) - test_count
+    if test_count < class_count or train_count < class_count:
+        raise ValueError(
+            "The dataset is too small for the requested stratified split. "
+            "Add more examples or adjust --test-size."
+        )
+
     x_train, x_test, y_train, y_test = train_test_split(
         frame[TEXT_COLUMN],
         frame[LABEL_COLUMN],
@@ -206,7 +255,11 @@ def main() -> None:
     )
 
     pipeline = build_pipeline()
-    LOGGER.info("Training on %d samples; testing on %d samples.", len(x_train), len(x_test))
+    LOGGER.info(
+        "Training on %d samples; testing on %d samples.",
+        len(x_train),
+        len(x_test),
+    )
     pipeline.fit(x_train, y_train)
     predictions = pipeline.predict(x_test)
 
@@ -215,6 +268,7 @@ def main() -> None:
 
     import joblib
 
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipeline, MODEL_DIR / "sentiment_pipeline.joblib")
     LOGGER.info("Evaluation results:")
     LOGGER.info("Accuracy: %.4f", results["accuracy"])
