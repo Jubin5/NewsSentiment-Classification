@@ -94,3 +94,14 @@ pytest
 ## Limitations
 
 Performance depends on label quality, class balance, data leakage, and how similar future headlines are to the training data. A random split is a baseline; for duplicate-heavy data or time-sensitive news, use duplicate-aware or chronological validation too.
+
+
+## Verified binary labels and evaluation (October 2026)
+
+For the supplied `news_sentiment.csv`, `0` means **negative** and `1` means **positive**. The training pipeline converts these to readable labels. The dataset has 848 original rows, including one duplicate text; 847 unique rows are used. Class counts before deduplication: 100 negative and 748 positive.
+
+To address class imbalance, training uses a stratified 80/20 split and selects class weights using 3-fold stratified cross-validation **on training data only**, optimizing macro F1. The held-out test set is evaluated once after model selection.
+
+In the verified local evaluation (677 train / 170 test), the selected TF-IDF unigram + Logistic Regression model used negative:positive class weights of 10:1. Held-out accuracy: **91.76%**, macro F1: **79.26%**, weighted F1: **91.58%**, negative recall: **60%**, and positive recall: **96%**. Confusion matrix in [negative, positive] order: `[[12, 8], [6, 144]]`. These results reflect a small test set with only 20 negative samples; they are not a guarantee of production performance.
+
+The training command regenerates model artifacts and evaluation reports locally. Do not commit the dataset without verifying redistribution rights.
