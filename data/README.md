@@ -5,7 +5,7 @@ Place the labelled dataset here as `news_sentiment.csv`.
 Required columns:
 
 - `text`: news headline or article text
-- `sentiment`: ground-truth sentiment label (for example, `positive`, `negative`, or `neutral`)
+- `sentiment`: ground-truth sentiment label (for example, `positive` or `negative`)
 
 Example schema:
 
